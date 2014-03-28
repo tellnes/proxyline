@@ -1,5 +1,5 @@
 name: proxyline
-version: 0.0.2
+version: 0.0.3
 description: "Parse the proxyline added by HAProxy, Stud, Bud and others."
 keywords:
   - haproxy
