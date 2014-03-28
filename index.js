@@ -11,17 +11,23 @@ function read(n, socket, cb) {
   socket.once('readable', read.bind(this, n, socket, cb))
 }
 
-function indexOf(buf, needle, index) {
+function indexOf(buf, needle, index, max) {
   index = index || 0
+  max = max || buf.length
   while (buf[index] !== needle) {
     index++
-    if (index === buf.length) return -1
+    if (index === max) return -1
   }
   return index
 }
 
 function onSocket(socket, cb) {
-  read(107, socket, function (buf) {
+  var firstBuffer
+    , buffers
+    , length = 0
+
+  read(6, socket, function (buf) {
+    firstBuffer = buf
     if (!(buf[0] === 0x50 && // P
           buf[1] === 0x52 && // R
           buf[2] === 0x4F && // O
@@ -29,17 +35,42 @@ function onSocket(socket, cb) {
           buf[4] === 0x59 && // Y
           buf[5] === 0x20 )  // [space]
       ) {
-      return socket.unshift(buf), cb()
+      return failed()
     }
 
-    var end = indexOf(buf, 0x0D, 6)
-    if (!~end || buf[end + 1] !== 0x0A) {
-      return socket.unshift(buf), cb()
+    more()
+  })
+
+  function more() {
+    var buf = socket.read()
+    if (!buf) return socket.once('readable', more)
+
+    var end = indexOf(buf, 0x0A, 0, Math.min(buf.length, 102 - length))
+
+    // LF not found
+    if (!~end) {
+      if (buffers) buffers.push(buf)
+      else buffers = [ buf ]
+      length += buf.length
+      if (length < 102) socket.once('readable', more)
+      else failed()
+      return
     }
 
-    var parts = buf.slice(6, end).toString().split(' ')
+    // Concat if more than one buffer
+    if (buffers) {
+      buffers.push(buf)
+      buf = Buffer.concat(buffers, length + buf.length)
+    }
 
-    var result = {}
+    end += length
+    if (buf[end - 1] !== 0x0D) return failed()
+
+
+
+    var parts = buf.slice(0, end - 1).toString().split(' ')
+      , result = {}
+
     result.protocol = parts[0]
     if (parts[0] === 'TCP4' || parts[0] === 'TCP6') {
       result.source = { address: parts[1], port: parseInt(parts[3], 10) }
@@ -48,9 +79,21 @@ function onSocket(socket, cb) {
       result.data = parts.slice(1).join(' ')
     }
 
-    socket.unshift(buf.slice(end))
+    socket.unshift(buf.slice(end + 1))
     cb(null, result)
-  })
+  }
+
+  function failed() {
+    socket.unshift(firstBuffer)
+
+    if (buffers) {
+      for (var i = 0; i < buffers.length; i++) {
+        socket.unshift(buffers[i])
+      }
+    }
+
+    cb()
+  }
 }
 
 function inject(server) {
@@ -68,7 +111,7 @@ function customEmit(type, arg) {
   case 'connect':
   case 'upgrade':
   case 'checkContinue':
-    onRequestObj(arg)
+    onIncoming(arg)
     break
   }
 
@@ -90,7 +133,7 @@ function onConnection(server, socket) {
   })
 }
 
-function onRequestObj(req) {
+function onIncoming(req) {
   if (req.socket.proxyline && req.socket.proxyline.source) {
     if (req.headers['x-forwarded-for']) {
       req.headers['x-forwarded-for'] += ',' + req.socket.proxyline.source.address
