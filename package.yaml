@@ -11,7 +11,7 @@ keywords:
 main: index.js
 
 scripts:
-  test: node test/simple.js
+  test: tap test/
 
 author: "Christian Tellnes <christian@tellnes.no> (http://christian.tellnes.com/)"
 license: MIT
@@ -21,3 +21,7 @@ repository:
 bugs:
   url: "https://github.com/tellnes/proxyline/issues"
 homepage: "https://github.com/tellnes/proxyline"
+
+devDependencies:
+  tap: ~0.4.8
+  spdy: ~1.24.0

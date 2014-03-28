@@ -22,77 +22,117 @@ function indexOf(buf, needle, index, max) {
 }
 
 function onSocket(socket, cb) {
-  var firstBuffer
-    , buffers
+
+  socket.on('readable', onReadable)
+
+  var buffers
     , length = 0
+    , state = 1
+    , cut = 0
 
-  read(6, socket, function (buf) {
-    firstBuffer = buf
-    if (!(buf[0] === 0x50 && // P
-          buf[1] === 0x52 && // R
-          buf[2] === 0x4F && // O
-          buf[3] === 0x58 && // X
-          buf[4] === 0x59 && // Y
-          buf[5] === 0x20 )  // [space]
-      ) {
-      return failed()
-    }
+  function read(start, end) {
+    var buf
 
-    more()
-  })
+    if (!end || length < end - start) {
+      buf = socket.read()
 
-  function more() {
-    var buf = socket.read()
-    if (!buf) return socket.once('readable', more)
-
-    var end = indexOf(buf, 0x0A, 0, Math.min(buf.length, 102 - length))
-
-    // LF not found
-    if (!~end) {
-      if (buffers) buffers.push(buf)
-      else buffers = [ buf ]
+      if (buffers) {
+        if (Array.isArray(buffers)) buffers.push(buf)
+        else buffers = [ buffers, buf ]
+      } else buffers = buf
       length += buf.length
-      if (length < 102) socket.once('readable', more)
-      else failed()
-      return
+
+      if (length < end - start) return null
     }
 
-    // Concat if more than one buffer
-    if (buffers) {
-      buffers.push(buf)
-      buf = Buffer.concat(buffers, length + buf.length)
+    if (Array.isArray(buffers)) {
+      buffers = Buffer.concat(buffers, length)
     }
 
-    end += length
-    if (buf[end - 1] !== 0x0D) return failed()
-
-
-
-    var parts = buf.slice(0, end - 1).toString().split(' ')
-      , result = {}
-
-    result.protocol = parts[0]
-    if (parts[0] === 'TCP4' || parts[0] === 'TCP6') {
-      result.source = { address: parts[1], port: parseInt(parts[3], 10) }
-      result.dest = { address: parts[2], port: parseInt(parts[4], 10) }
-    } else {
-      result.data = parts.slice(1).join(' ')
-    }
-
-    socket.unshift(buf.slice(end + 1))
-    cb(null, result)
+    return buffers.slice(start, end)
   }
 
-  function failed() {
-    socket.unshift(firstBuffer)
+  function onReadable(noRead) {
+    var buf
 
-    if (buffers) {
-      for (var i = 0; i < buffers.length; i++) {
-        socket.unshift(buffers[i])
+    switch (state) {
+    case 1:
+      buf = read(0, 6)
+      if (!buf) return
+
+      if (!(buf[0] === 0x50 && // P
+            buf[1] === 0x52 && // R
+            buf[2] === 0x4F && // O
+            buf[3] === 0x58 && // X
+            buf[4] === 0x59 && // Y
+            buf[5] === 0x20 )  // [space]
+        ) {
+        return finish()
+        }
+      state = 2
+      onReadable(true)
+      break
+
+    case 2:
+      if (noRead) {
+        if (Array.isArray(buffers)) {
+          buffers = Buffer.concat(buffers, length)
+        }
+        buf = buffers
+      } else {
+        buf = read(0)
+      }
+      if (!buf) return // wait for more
+
+      var end = indexOf(buf, 0x0A, 5, buf.length)
+      if (!~end) return // wait for more
+
+      end -= 1
+      if (buf[end] !== 0x0D) return finish()
+
+      var parts = buf.slice(6, end).toString().split(' ')
+        , result = {}
+
+      result.protocol = parts[0]
+      if (parts[0] === 'TCP4' || parts[0] === 'TCP6') {
+        result.source = { address: parts[1], port: parseInt(parts[3], 10) }
+        result.dest = { address: parts[2], port: parseInt(parts[4], 10) }
+      } else {
+        result.data = parts.slice(1).join(' ')
+      }
+
+      cut = end + 2
+      finish(null, result)
+      break
+    }
+  }
+
+  function finish(err, result) {
+    socket.removeListener('readable', onReadable)
+
+    var buf
+
+    if (cut < length) {
+      buf = read(cut, length)
+      if (buf) socket.unshift(buf)
+    }
+
+    buffers = null
+    length = 0
+
+    cb(err, result)
+
+    if (buf) {
+      if (socket.ondata) {
+        buf = socket.read()
+        if (buf) {
+          socket.ondata(buf, 0, buf.length)
+        }
+      } else {
+        socket.emit('readable')
       }
     }
 
-    cb()
   }
 }
 
