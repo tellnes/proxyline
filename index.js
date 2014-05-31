@@ -2,15 +2,6 @@
 module.exports = onSocket
 module.exports.inject = inject
 
-function read(n, socket, cb) {
-  var buf = socket.read(n)
-  if (buf) {
-    return cb(buf)
-  }
-
-  socket.once('readable', read.bind(this, n, socket, cb))
-}
-
 function indexOf(buf, needle, index, max) {
   index = index || 0
   max = max || buf.length
@@ -68,7 +59,7 @@ function onSocket(socket, cb) {
             buf[5] === 0x20 )  // [space]
         ) {
         return finish()
-        }
+      }
       state = 2
       onReadable(true)
       break
