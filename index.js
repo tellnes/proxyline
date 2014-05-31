@@ -26,6 +26,7 @@ function onSocket(socket, cb) {
 
     if (!end || length < end - start) {
       buf = socket.read()
+      if (!buf) return
 
       if (buffers) {
         if (Array.isArray(buffers)) buffers.push(buf)
