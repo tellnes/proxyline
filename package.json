@@ -1,0 +1,30 @@
+{
+  "name": "proxyline",
+  "version": "0.0.4",
+  "description": "Parse the proxyline added by HAProxy, Stud, Bud and others.",
+  "keywords": [
+    "haproxy",
+    "bud",
+    "proxyline",
+    "stud",
+    "ip"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "tap test/"
+  },
+  "author": "Christian Tellnes <christian@tellnes.no> (http://christian.tellnes.com/)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/tellnes/proxyline.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tellnes/proxyline/issues"
+  },
+  "homepage": "https://github.com/tellnes/proxyline",
+  "devDependencies": {
+    "tap": "~0.4.8",
+    "spdy": "~1.24.0"
+  }
+}
