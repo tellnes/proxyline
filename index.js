@@ -20,6 +20,7 @@ function onSocket(socket, cb) {
     , length = 0
     , state = 1
     , cut = 0
+    , isBud = false
 
   function read(start, end) {
     var buf
@@ -52,13 +53,24 @@ function onSocket(socket, cb) {
       buf = read(0, 6)
       if (!buf) return
 
-      if (!(buf[0] === 0x50 && // P
+      if ( buf[0] === 0x42 && // B
+            buf[1] === 0x55 && // U
+            buf[2] === 0x44 && // D
+            buf[3] === 0x20 // [space]
+          ) {
+        isBud = true
+      }
+
+      if (!((buf[0] === 0x50 && // P
             buf[1] === 0x52 && // R
             buf[2] === 0x4F && // O
             buf[3] === 0x58 && // X
             buf[4] === 0x59 && // Y
             buf[5] === 0x20 )  // [space]
+            || isBud
+           )
         ) {
+        console.log('is finishing')
         return finish()
       }
       state = 2
@@ -82,15 +94,18 @@ function onSocket(socket, cb) {
       end -= 1
       if (buf[end] !== 0x0D) return finish()
 
-      var parts = buf.slice(6, end).toString().split(' ')
-        , result = {}
+      var parts = (! isBud) ?
+            buf.slice(6, end).toString().split(' ') :
+            buf.slice(4, end).toString().split(' ')
 
-      result.protocol = parts[0]
+      var result = {}
+
+      result.protocol = (!isBud) ? parts[0] : 'BUD'
       if (parts[0] === 'TCP4' || parts[0] === 'TCP6') {
         result.source = { address: parts[1], port: parseInt(parts[3], 10) }
         result.dest = { address: parts[2], port: parseInt(parts[4], 10) }
       } else {
-        result.data = parts.slice(1).join(' ')
+        result.data = (!isBud) ? parts.slice(1).join(' ') : parts
       }
 
       cut = end + 2
